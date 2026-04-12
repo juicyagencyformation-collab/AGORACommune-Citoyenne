@@ -1592,7 +1592,7 @@ async function loadProfile(){
     const {data:created}=await sb.from('profiles').upsert(newProfile).select().single();
     CP=created||newProfile;
   }
-  isAdmin = CP.role === 'admin';
+  isAdmin = CP.role === 'admin' || CP.role === 'super_admin';
 }
 
 function getLevel(xp){let lv=LEVELS[0];for(const l of LEVELS){if(xp>=l.xp)lv=l;}return lv;}
