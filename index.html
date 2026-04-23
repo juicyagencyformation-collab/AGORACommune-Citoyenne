@@ -3042,25 +3042,28 @@ function renderBadges(){
       <div class="bicon2">${b.icon}</div>
       <div class="bname">${b.name}</div>
     </div>`).join('');
-  // Badges custom des chasses (format "chasse-ID")
-  const chasseBadges=earned.filter(id=>id.startsWith('chasse-'));
-  if(chasseBadges.length){
+  // Badges custom des chasses — on utilise badges_custom (persistant) en priorité
+const chasseBadges=earned.filter(id=>id.startsWith('chasse-'));
+if(chasseBadges.length){
     chasseBadges.forEach(bid=>{
-      const chasseId=parseInt(bid.replace('chasse-',''));
-      const chasse=chasseData.find(c=>c.id===chasseId);
-      if(chasse){
-        html+=`<div class="bitem earned" title="${chasse.badge_desc||'Chasse terminée'}">
-          <div class="bicon2">${chasse.badge_icon||'🏆'}</div>
-          <div class="bname">${chasse.badge_nom||'Chasseur'}</div>
+      // D'abord chercher dans badges_custom (source de vérité persistante)
+      const saved=(CP.badges_custom||[]).find(b=>b.id===bid);
+      if(saved){
+        html+=`<div class="bitem earned" title="${esc(saved.desc||'Chasse terminée')}">
+          <div class="bicon2">${saved.icon||'🏆'}</div>
+          <div class="bname">${esc(saved.nom||'Chasseur')}</div>
         </div>`;
       } else {
-        html+=`<div class="bitem earned" title="Chasse terminée">
-          <div class="bicon2">🏆</div>
-          <div class="bname">Chasseur</div>
+        // Fallback : chercher dans chasseData (si la chasse est encore en mémoire)
+        const chasseId=parseInt(bid.replace('chasse-',''));
+        const chasse=chasseData.find(c=>c.id===chasseId);
+        html+=`<div class="bitem earned" title="${esc(chasse?.badge_desc||'Chasse terminée')}">
+          <div class="bicon2">${chasse?.badge_icon||'🏆'}</div>
+          <div class="bname">${esc(chasse?.badge_nom||'Chasseur')}</div>
         </div>`;
       }
     });
-  }
+}
   // Rétrocompatibilité : ancien format 'b-chasse'
   if(earned.includes('b-chasse')){
     html+=`<div class="bitem earned" title="A trouvé un trésor">
@@ -4816,10 +4819,20 @@ async function validerCodeFinal(chasseId, codeAttendu, xpReward){
     const badgeId='chasse-'+chasseId;
     const nb=[...(CP.badges||[]),badgeId];
     CP.badges=nb;
-    await sb.from('profiles').update({badges:nb}).eq('id',CP.id);
     const chasse=chasseData.find(c=>c.id===chasseId);
-    setTimeout(()=>showBadgeModal({icon:chasse?.badge_icon||'🏆',name:chasse?.badge_nom||'Chasseur de trésor',desc:chasse?.badge_desc||'A terminé la chasse au trésor'}),800);
-  }
+    // Sauvegarder les infos du badge pour qu'elles soient persistantes
+    const badgeInfo={
+      id:badgeId,
+      icon:chasse?.badge_icon||'🏆',
+      nom:chasse?.badge_nom||'Chasseur de trésor',
+      desc:chasse?.badge_desc||'A terminé la chasse au trésor',
+      earned_at:new Date().toISOString()
+    };
+    const badgesCustom=[...(CP.badges_custom||[]).filter(b=>b.id!==badgeId), badgeInfo];
+    CP.badges_custom=badgesCustom;
+    await sb.from('profiles').update({badges:nb, badges_custom:badgesCustom}).eq('id',CP.id);
+    setTimeout(()=>showBadgeModal({icon:badgeInfo.icon,name:badgeInfo.nom,desc:badgeInfo.desc}),800);
+}
   launchConfetti();
   setTimeout(()=>chargerLeaderboard(chasseId),600);
   setTimeout(()=>{chasseParticipation=null;chasseActive=null;loadChasses();},8000);
